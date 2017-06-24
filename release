@@ -13,17 +13,11 @@
 #      pandoc -o CHANGELOG-RELEASE.rst CHANGELOG-RELEASE.md
 #   3) incorporate CHANGELOG-RELEASE into astformatter/__init__.py
 
-projectdir="$(pwd)"
-while [[ "${projectdir}" != / && ! -f "${projectdir}/.pyproject" ]]; do
-  projectdir="$(dirname "${projectdir}")"
-done
-if [[ "${projectdir}" == "/" ]]; then
-  echo "No .pyproject file found!" 1>&2; exit 1
-fi
+. "$(dirname "$0")/pyprlib.sh"
 
-cd "${projectdir}"
+pypr_load_project || exit 1
 
-eval "$(sed -e 's/^ *//;s/ *$//' -e '/^$/d' -e '/^#/d' -e '/^\[/{s/^.//;s/]$/__/;x;d}' -e 'x;G;s/\n//;p;s/__.*/__/;x;d' $HOME/.pyproject .pyproject)"
+cd "${_pypr_project_dir}"
 
 gcg_opts="-u ${github__user} -p ${github__repo} --exclude-labels duplicate,question,invalid,wontfix,nochangelog --no-verbose --future-release ${project__version} --release-url 'https://pypi.python.org/pypi?:action=display&name=${project__name}&version=%s'"
 
