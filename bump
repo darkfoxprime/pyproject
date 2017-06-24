@@ -1,0 +1,89 @@
+#!/bin/sh
+#
+# Usage:  bump [ -M|--major | -m|--minor | -p|--patch ] [ <prerelease>... ]
+#
+# bump the [project] version string and optionally add a prerelease tag.
+#
+# prerelease tags must begin either with + or - and contain only
+# alphanumeric characters and periods (.).
+#
+# If no options are specified, and the current version has a prerelease
+# tag, the prerelease tag is removed; otherwise, the patch level is
+# bumped.
+#
+# If only a prerelease tag is specified, and the current version has a
+# prerelease tag, the prerelease tag is updated; otherwise, the patch
+# level is bumped and the prerelease tag is added.
+#
+# Otherwise, whichever version component is specified (only one may be),
+# that version is bumped, the lower components are set to 0, and the
+# prerelease tag, if any, is added.
+
+. "$(dirname "$0")/pyprlib.sh"
+
+pypr_parse_options "version=,v" "major,M" "minor,m" "patch,p" -- "$@"
+
+# sanity check options
+$_pypr_opt_major && $_pypr_opt_minor && pypr_usage "Only one of --major, --minor, or --patch may be specified"
+$_pypr_opt_major && $_pypr_opt_patch && pypr_usage "Only one of --major, --minor, or --patch may be specified"
+$_pypr_opt_minor && $_pypr_opt_patch && pypr_usage "Only one of --major, --minor, or --patch may be specified"
+
+if [[ ${#_pypr_args[@]} -gt 0 ]]; then
+  _pypr_opt_prerelease=""
+  for arg in "${_pypr_args[@]}"; do
+    parg="${arg#[-+]}"
+    [[ "${parg}" == "${arg}" ]] && pypr_usage "Invalid prerelease tag '${arg}' ; must begin with - or +"
+    [[ "${parg/[^.0-9a-zA-Z]/}" != "${parg}" ]] && pypr_usage "Invalid prerelease tag '${arg}' ; must contain only alphanumeric characters after the leading + or -"
+    _pypr_opt_prerelease="${_pypr_opt_prerelease}${arg}"
+  done
+fi
+
+if [[ -n "${_pypr_opt_version}" ]]; then
+  project__version="${_pypr_opt_version}"
+  debug=pypr_true
+else
+  debug=pypr_false
+  pypr_find_project_dir || exit 1
+  pypr_load_project "${_pypr_project_dir}"
+  project__version="${project__version}"
+fi
+
+[[ -z "${project__version}" ]] && { echo "No version found in ${_pypr_project_dir}/.pyproject" 1>&2; exit 1; }
+
+v_version="${project__version%%[-+]*}"
+v_prerelease="${project__version#"${v_version}"}"
+v_patch="${v_version##*.}"
+[[ "${v_patch}" == "${v_version}" ]] && pypr_usage "Invalid version '${project__version}' found in pyproject: must have exactly three .-separated version components before the prerelease tag, if any"
+v_version="${v_version%%".${v_patch}"}"
+v_minor="${v_version##*.}"
+[[ "${v_minor}" == "${v_version}" ]] && pypr_usage "Invalid version '${project__version}' found in pyproject: must have exactly three .-separated version components before the prerelease tag, if any"
+v_major="${v_version%%".${v_minor}"}"
+[[ "${v_major}" != "${v_major#*.}" ]] && pypr_usage "Invalid version '${project__version}' found in pyproject: must have exactly three .-separated version components before the prerelease tag, if any"
+[[ "${v_major/[^0-9]/}" != "${v_major}" || "${v_minor/[^0-9]/}" != "${v_minor}" || "${v_patch/[^0-9]/}" != "${v_patch}" ]] && pypr_usage "Invalid version '${project__version}' found in pyproject: primary version components must be numeric"
+
+if $_pypr_opt_major; then
+  v_major=$((v_major + 1))
+  v_minor=0
+  v_patch=0
+  v_prerelease="${_pypr_opt_prerelease}"
+elif $_pypr_opt_minor; then
+  v_minor=$((v_minor + 1))
+  v_patch=0
+  v_prerelease="${_pypr_opt_prerelease}"
+elif $_pypr_opt_patch; then
+  v_patch=$((v_patch + 1))
+  v_prerelease="${_pypr_opt_prerelease}"
+elif [[ -n "${_pypr_opt_prerelease}" ]]; then
+  v_prerelease="${_pypr_opt_prerelease}"
+elif [[ -n "${v_prerelease}" ]]; then
+  v_prerelease=""
+else
+  v_patch=$((v_patch + 1))
+fi
+
+echo "old version: ${project__version}"
+echo "new version: ${v_major}.${v_minor}.${v_patch}${v_prerelease}"
+
+if ! $debug; then
+  sed -i -e '/^ *\[project\] *$/,/^ *\[/{' -e '/^ *version *=/d' -e '/^ *\[project\] *$/a version='"${v_major}.${v_minor}.${v_patch}${v_prerelease}" -e '}' "${_pypr_project_dir}/.pyproject"
+fi
