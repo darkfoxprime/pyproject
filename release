@@ -1,0 +1,52 @@
+#!/bin/sh
+#
+# Before running this script:
+#   1) ensure the __VERSION__ string in astformatter/__init__.py is correct
+#
+# Steps to release:
+#   0) run `behave` tests to ensure everything is good
+#   1) generate full changelog and convert to CHANGELOG.rst
+#      github_changelog_generator -u darkfoxprime -p python-astformatter --exclude-labels duplicate,question,invalid,wontfix,nochangelog --no-verbose --future-release __VERSION__
+#      pandoc -o CHANGELOG.rst CHANGELOG.md
+#   2) generate unreleased changelog and convert to CHANGELOG-RELEASE.rst
+#      github_changelog_generator -u darkfoxprime -p python-astformatter --exclude-labels duplicate,question,invalid,wontfix,nochangelog --no-verbose --future-release __VERSION__ -o CHANGELOG-RELEASE.md
+#      pandoc -o CHANGELOG-RELEASE.rst CHANGELOG-RELEASE.md
+#   3) incorporate CHANGELOG-RELEASE into astformatter/__init__.py
+
+projectdir="$(pwd)"
+while [[ "${projectdir}" != / && ! -f "${projectdir}/.pyproject" ]]; do
+  projectdir="$(dirname "${projectdir}")"
+done
+if [[ "${projectdir}" == "/" ]]; then
+  echo "No .pyproject file found!" 1>&2; exit 1
+fi
+
+cd "${projectdir}"
+
+eval "$(sed -e 's/^ *//;s/ *$//' -e '/^$/d' -e '/^#/d' -e '/^\[/{s/^.//;s/]$/__/;x;d}' -e 'x;G;s/\n//;p;s/__.*/__/;x;d' $HOME/.pyproject .pyproject)"
+
+gcg_opts="-u ${github__user} -p ${github__repo} --exclude-labels duplicate,question,invalid,wontfix,nochangelog --no-verbose --future-release ${project__version} --release-url 'https://pypi.python.org/pypi?:action=display&name=${project__name}&version=%s'"
+
+echo "Releasing ${project__name} version ${project__version}"
+
+echo "########  Minimal 'behave' tests"
+
+behave --format=progress || exit 1
+
+echo "########  Generating full CHANGELOG"
+
+github_changelog_generator ${gcg_opts} -o CHANGELOG.md
+pandoc -o CHANGELOG.rst CHANGELOG.md
+
+echo "########  Generating Latest Changes for docstring / README"
+
+github_changelog_generator ${gcg_opts} --no-compare-link --simple-list --unreleased-only -o CHANGELOG-RELEASE.md --header-label '# Latest Changes'
+sed -i -e 's/^#/##/' -e '$d' CHANGELOG-RELEASE.md
+pandoc -o CHANGELOG-RELEASE.rst CHANGELOG-RELEASE.md
+
+echo "########  Inserting version and latest changes into docstring"
+
+indent=$(sed -n -e 's;\(^ *\)Latest Changes.*;\1;p' ${project__docfile})
+sed -i -e "s/^/${indent}/" CHANGELOG-RELEASE.rst
+sed -i -e '/Latest Changes/,/Copyright/s/^/..  /' -e '/Latest Changes/r CHANGELOG-RELEASE.rst' -e '/^\.\. *Copyright/s/^\.\.  //' -e '/^\.\.  /d' -e '/^ *__version__ *=/s/=.*/= '"'${project__version}'/" ${project__docfile}
+rm CHANGELOG-RELEASE.rst CHANGELOG*.md
