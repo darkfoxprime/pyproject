@@ -21,7 +21,7 @@ cd "${_pypr_project_dir}"
 
 gcg_opts="-u ${github__user} -p ${github__repo} --exclude-labels duplicate,question,invalid,wontfix,nochangelog --no-verbose --future-release ${project__version} --release-url 'https://pypi.python.org/pypi?:action=display&name=${project__name}&version=%s'"
 
-echo "Releasing ${project__name} version ${project__version}"
+echo "Preparing ${project__name} version ${project__version}"
 
 echo "########  Minimal 'behave' tests"
 
