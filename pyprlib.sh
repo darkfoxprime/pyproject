@@ -84,25 +84,36 @@ pypr_parse_options() {
   local t
   local -A short_to_long
   local -A takes_arg
+  local -A arg_type
+  local -A long_opt
   declare -a args
   short_options=''
   long_options=''
   while [[ -n "$1" && "$1" != "--" ]]; do
     [[ "${1%%,*}" == "${1%,*}" ]] || { echo "Invalid option specified: $1" 1>&2; return 254; }
     t="${1%,*}"
-    long_opt="${t%=}"
+    long_opt="${t%=*}"
     if [[ "${long_opt}" != "${t}" ]] ; then
       sfx=":"
       takes_arg[${long_opt}]=pypr_true
+      arg_type[${long_opt}]="${t##"${long_opt}"}"
+      if [[ "${arg_type[${long_opt}]}" == "=@" ]]; then
+          eval "_pypr_val_${long_opt}=()"
+      else
+          eval "_pypr_val_${long_opt}=''"
+      fi
     else
       sfx=""
       takes_arg[${long_opt}]=pypr_false
     fi
+    eval "_pypr_opt_${long_opt}=pypr_false"
     long_options="${long_options}${long_options:+,}${long_opt}${sfx}"
     t="${1#"${t}"}"
     short_opt="${t#,}"
-    [[ -n "${t}" ]] && short_options="${short_options}${short_opt}${sfx}"
-    short_to_long[${short_opt}]="${long_opt}"
+    if [[ -n "${t}" ]]; then
+      short_options="${short_options}${short_opt}${sfx}"
+      short_to_long[${short_opt}]="${long_opt}"
+    fi
     shift
   done
   [[ -n "$1" ]] || { echo "No end-of-options terminating -- found" 1>&2; return 254; }
@@ -113,14 +124,6 @@ pypr_parse_options() {
     *) pypr_usage;;
   esac
   eval "set -- $t"
-
-  for long_opt in "${!takes_arg[@]}"; do
-    if ${takes_arg[$long_opt]}; then
-      eval "_pypr_opt_${long_opt}=''"
-    else
-      eval "_pypr_opt_${long_opt}=pypr_false"
-    fi
-  done
 
   while [[ "$1" != "--" ]]; do
     case "$1" in
@@ -134,14 +137,20 @@ pypr_parse_options() {
         ;;
     esac
     shift
+    eval "_pypr_opt_${long_opt}=pypr_true"
     if ${takes_arg[$long_opt]}; then
-      eval "_pypr_opt_${long_opt}='$1'"
+      case "${arg_type[${long_opt}]}" in
+        "=@")
+          eval 't=${#_pypr_val_'"${long_opt}"'[@]}'
+          eval '_pypr_val_'"${long_opt}"'['"$((t + 1))"']="$1"'
+          ;;
+        *)
+          eval '_pypr_val_'"${long_opt}"'="$1"'
+      esac
       shift
-    else
-      eval "_pypr_opt_${long_opt}=pypr_true"
     fi
   done
 
   shift
-  _pypr_args=($@)
+  _pypr_args=("$@")
 }

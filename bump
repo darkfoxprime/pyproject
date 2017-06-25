@@ -29,17 +29,17 @@ $_pypr_opt_major && $_pypr_opt_patch && pypr_usage "Only one of --major, --minor
 $_pypr_opt_minor && $_pypr_opt_patch && pypr_usage "Only one of --major, --minor, or --patch may be specified"
 
 if [[ ${#_pypr_args[@]} -gt 0 ]]; then
-  _pypr_opt_prerelease=""
+  _pypr_val_prerelease=""
   for arg in "${_pypr_args[@]}"; do
     parg="${arg#[-+]}"
     [[ "${parg}" == "${arg}" ]] && pypr_usage "Invalid prerelease tag '${arg}' ; must begin with - or +"
     [[ "${parg/[^.0-9a-zA-Z]/}" != "${parg}" ]] && pypr_usage "Invalid prerelease tag '${arg}' ; must contain only alphanumeric characters after the leading + or -"
-    _pypr_opt_prerelease="${_pypr_opt_prerelease}${arg}"
+    _pypr_val_prerelease="${_pypr_val_prerelease}${arg}"
   done
 fi
 
-if [[ -n "${_pypr_opt_version}" ]]; then
-  project__version="${_pypr_opt_version}"
+if $_pypr_opt_version ]]; then
+  project__version="${_pypr_val_version}"
   debug=pypr_true
 else
   debug=pypr_false
@@ -65,16 +65,16 @@ if $_pypr_opt_major; then
   v_major=$((v_major + 1))
   v_minor=0
   v_patch=0
-  v_prerelease="${_pypr_opt_prerelease}"
+  v_prerelease="${_pypr_val_prerelease}"
 elif $_pypr_opt_minor; then
   v_minor=$((v_minor + 1))
   v_patch=0
-  v_prerelease="${_pypr_opt_prerelease}"
+  v_prerelease="${_pypr_val_prerelease}"
 elif $_pypr_opt_patch; then
   v_patch=$((v_patch + 1))
-  v_prerelease="${_pypr_opt_prerelease}"
-elif [[ -n "${_pypr_opt_prerelease}" ]]; then
-  v_prerelease="${_pypr_opt_prerelease}"
+  v_prerelease="${_pypr_val_prerelease}"
+elif [[ -n "${_pypr_val_prerelease}" ]]; then
+  v_prerelease="${_pypr_val_prerelease}"
 elif [[ -n "${v_prerelease}" ]]; then
   v_prerelease=""
 else
