@@ -1,0 +1,75 @@
+#!/bin/sh
+#
+# Usage: release [ <options>... ] --to (github | pypi) [ --to ... ] <dist>...
+#
+# --keep
+#   keep any existing release files already located in `dist`
+#
+# --sign <key>
+#   sign the release files using the given gpg key
+#
+# --to <where>
+#   Where to release to - currently, github or pypi
+#   Can be specified multiple times to make multiple releases
+#
+# --noop
+#   Don't actually release the files
+#
+# --verbose
+#   Give more verbose output of what's happening
+
+. "$(dirname "$0")/pyprlib.sh"
+
+pypr_load_project || exit 1
+
+options=("keep,k" "sign=,s" "to=@" "noop,n" "verbose,v")
+
+for relscript in "$0".*; do
+  rel="${relscript##"$0."}"
+  . "${relscript}"
+  eval "options=(\"\${options[@]}\" \"\${options_${rel}[@]}\")"
+done
+
+pypr_parse_options "${options[@]}" -- ${1+"$@"}
+
+echo "_pypr_opt_to=<${_pypr_opt_to[*]}>"
+
+[[ "${#_pypr_val_to[@]}" -eq 0 ]] && pypr_usage -0
+
+for rel in "${_pypr_val_to[@]}"; do
+  declare -F "release_${rel}" >/dev/null || pypr_usage "Unknown release type ${rel}"
+done
+
+cd "${_pypr_project_dir}"
+
+if ! ${_pypr_opt_keep}; then
+  rm -fr dist
+fi
+
+set -- "${_pypr_args[@]}"
+
+# build releases
+while [[ $# -gt 0 && "$1" != "--" ]]; do
+  echo "Building ${1} release files"
+  python setup.py "$1"
+  shift
+done
+
+# sign files
+if $_pypr_opt_sign ]]; then
+  echo "Signing all distribution files"
+  export GPG_TTY=$(tty)
+  eval $(gpg-agent --daemon --sh --quiet)
+  trap "kill $(echo "${GPG_AGENT_INFO}" | cut -d: -f2)" 0
+  shopt -s nullglob
+  for file in dist/*; do
+    [[ "${file%%.asc}" != "${file}" ]] && continue
+    $_pypr_opt_keep && [[ "${file}.asc" -nt "${file}" ]] && continue
+    gpg --no-tty --detach-sign --quiet --output="${file}.asc" --yes --armor --default-key="${_pypr_val_sign}" "${file}"
+  done
+fi
+
+for rel in "${_pypr_val_to[@]}"; do
+  release_${rel}
+done
+

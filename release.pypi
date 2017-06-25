@@ -1,0 +1,26 @@
+#!/bin/sh
+
+options_pypi=("repo=@")
+
+release_pypi() {
+  [[ "${#_pypr_val_repo[@]}" -eq 0 ]] && _pypr_val_repo=("pypi")
+
+  local pypirepo
+
+  for pypirepo in "${_pypr_val_repo[@]}"; do
+    echo "Releasing ${project__name} version ${project__version} to ${pypirepo}"
+
+    local uploadopts
+    uploadopts=""
+
+    local file
+    for file in dist/*; do
+      [[ "${file%%.asc}" != "${file}" ]] && continue
+      local files
+      files[1]="${file}"
+      test -f "${file}.asc" && files[2]="${file}.asc"
+      $_pypr_opt_noop || twine register --repository ${pypirepo} ${file}
+      $_pypr_opt_noop || twine upload --repository ${pypirepo} ${uploadopts} "${files[@]}"
+    done
+  done
+}

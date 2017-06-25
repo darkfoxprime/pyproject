@@ -1,0 +1,61 @@
+#!/bin/sh
+
+options_github=("draft,d")
+
+release_github() {
+
+  release="v${project__version}"
+  [[ "${project__version%%.*}" == "0" || "${project__version##*[-+]}" != "${project__version}" ]] && prerelease=true version_type='prerelease version' || prerelease=false version_type='version'
+
+  message="$(git log -n 1  --pretty=format:%s%+)"
+  ref="$(git log -n 1 --pretty=format:%H)"
+
+  echo "Releasing ${project__name} ${version_type} ${project__version} to github"
+
+  urlbase="https://api.github.com/repos/${github__user}/${github__repo}"
+
+  release_data='{"tag_name":"'"${release}"'", "name":"'"${release}"'", "body":"'"${message}"'", "target_commitish":"'"${ref}"'", "draft":true, "prerelease":'"${prerelease}"'}'
+
+  if $_pypr_opt_noop; then
+    echo "(noop) would post ${release_data} to ${urlbase}/releases"
+    upload_url="${urlbase}/releases/.../assets"
+  else
+    eval "$(
+            curl -sS -X POST \
+                -H 'Content-Type: application/json' \
+                -H "Authorization: token ${github__token}" \
+                --data "${release_data}" \
+                "${urlbase}/releases" \
+            | python -mjson.tool \
+            | sed -n \
+                -e '/"author":/,/^ *}/d' \
+                -e '/upload_url/s/{[^}]*}//g' \
+                -e 's;^ *"upload_url": "\([^"]*\)".*;upload_url="\1";p' \
+                -e 's;^ *"id": \([^,]*\).*;id=\1;p'
+        )"
+  fi
+
+  for file in dist/*; do
+    [[ -f "${file}" ]] || continue
+    echo "Uploading ${file} to release"
+    size=$(wc -c < "${file}")
+    if $_pypr_opt_noop; then
+      echo "(noop) would post ${file} to ${upload_url}"
+    else
+      curl -sS -X POST --data-binary "@${file}" -H "Content-Type: $(file -b --mime-type "${file}")" -H "Authorization: token ${github__token}" "${upload_url}?name=${file}"
+    fi
+  done
+
+  publish_data='{"draft":false}'
+
+  if $_pypr_opt_noop; then
+    echo "(noop) would PATCH ${publish_data} to ${urlbase}/releases/${id}"
+  else
+    curl -sS -X PATCH \
+        -H 'Content-Type: application/json' \
+        -H "Authorization: token ${github__token}" \
+        --data "${publish_data}" \
+        "${urlbase}/releases/${id}"
+  fi
+
+}
